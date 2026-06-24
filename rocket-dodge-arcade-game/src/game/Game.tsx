@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   createGame, update, render,
   type InputState, type GameState,
@@ -85,56 +85,19 @@ export default function Game() {
       }
     };
 
-    // ── Touch ──
-    const touchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      initAudio();
-      const g = gameRef.current;
-      if (!g) return;
-
-      if (g.state === 'menu' || g.state === 'gameover') {
-        inputRef.current.start = true;
-        inputRef.current.restart = true;
-        return;
-      }
-
-      if (g.state === 'paused') {
-        inputRef.current.pause = true;
-        return;
-      }
-    };
-
-    const touchMove = (e: TouchEvent) => {
-      e.preventDefault();
-    };
-
-    const touchEnd = (e: TouchEvent) => {
-      e.preventDefault();
-    };
-
-    // ── Mouse click on canvas ──
+    // ── Global mouse click for menus ──
     const mouseDown = (_e: MouseEvent) => {
       initAudio();
       const g = gameRef.current;
       if (!g) return;
-
       if (g.state === 'menu' || g.state === 'gameover') {
         inputRef.current.start = true;
         inputRef.current.restart = true;
-        return;
-      }
-
-      if (g.state === 'paused') {
-        inputRef.current.pause = true;
-        return;
       }
     };
 
     window.addEventListener('keydown', keyDown);
     window.addEventListener('keyup', keyUp);
-    canvas.addEventListener('touchstart', touchStart, { passive: false });
-    canvas.addEventListener('touchmove', touchMove, { passive: false });
-    canvas.addEventListener('touchend', touchEnd, { passive: false });
     canvas.addEventListener('mousedown', mouseDown);
     window.addEventListener('resize', resize);
 
@@ -150,7 +113,6 @@ export default function Game() {
 
       update(g, dt, inp);
 
-      // Sync game state to React so UI can react
       if (g.state !== gameState) setGameState(g.state);
 
       inp.pause = false;
@@ -171,15 +133,11 @@ export default function Game() {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
-      canvas.removeEventListener('touchstart', touchStart);
-      canvas.removeEventListener('touchmove', touchMove);
-      canvas.removeEventListener('touchend', touchEnd);
       canvas.removeEventListener('mousedown', mouseDown);
       window.removeEventListener('resize', resize);
     };
-  }, [resize]);
+  }, [resize, gameState]);
 
-  // ── D-Pad button handlers ──
   const press = (dir: 'up' | 'down' | 'left' | 'right') => {
     initAudio();
     setPressed(prev => new Set(prev).add(dir));
@@ -187,7 +145,6 @@ export default function Game() {
     const g = gameRef.current;
     inp[dir] = true;
 
-    // Start game if on menu/gameover
     if (g && (g.state === 'menu' || g.state === 'gameover')) {
       inp.start = true;
       inp.restart = true;
@@ -209,7 +166,7 @@ export default function Game() {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', touchAction: 'none' }}>
       <canvas
         ref={canvasRef}
         style={{
@@ -224,10 +181,8 @@ export default function Game() {
         }}
       />
 
-      {/* ── Controls — only during gameplay ── */}
       {(gameState === 'playing' || gameState === 'paused') && (
       <>
-      {/* ── Pause Button ── */}
       <button
         onClick={pauseGame}
         style={{
@@ -247,15 +202,12 @@ export default function Game() {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 10,
-          transition: 'transform 0.1s, background 0.1s',
           WebkitTapHighlightColor: 'transparent',
         }}
-        onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); pauseGame(); }}
       >
         ⏸
       </button>
 
-      {/* ── D-Pad Controller ── */}
       <div
         style={{
           position: 'absolute',
@@ -267,51 +219,11 @@ export default function Game() {
           zIndex: 10,
         }}
       >
-        {/* Up */}
-        <DpadBtn
-          dir="up"
-          pressed={pressed.has('up')}
-          onDown={press}
-          onUp={release}
-          style={{ top: 0, left: '50%', transform: 'translateX(-50%)' }}
-        >
-          ▲
-        </DpadBtn>
+        <DpadBtn dir="up" pressed={pressed.has('up')} onDown={press} onUp={release} style={{ top: 0, left: '50%', transform: 'translateX(-50%)' }}>▲</DpadBtn>
+        <DpadBtn dir="down" pressed={pressed.has('down')} onDown={press} onUp={release} style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)' }}>▼</DpadBtn>
+        <DpadBtn dir="left" pressed={pressed.has('left')} onDown={press} onUp={release} style={{ top: '50%', left: 0, transform: 'translateY(-50%)' }}>◀</DpadBtn>
+        <DpadBtn dir="right" pressed={pressed.has('right')} onDown={press} onUp={release} style={{ top: '50%', right: 0, transform: 'translateY(-50%)' }}>▶</DpadBtn>
 
-        {/* Down */}
-        <DpadBtn
-          dir="down"
-          pressed={pressed.has('down')}
-          onDown={press}
-          onUp={release}
-          style={{ bottom: 0, left: '50%', transform: 'translateX(-50%)' }}
-        >
-          ▼
-        </DpadBtn>
-
-        {/* Left */}
-        <DpadBtn
-          dir="left"
-          pressed={pressed.has('left')}
-          onDown={press}
-          onUp={release}
-          style={{ top: '50%', left: 0, transform: 'translateY(-50%)' }}
-        >
-          ◀
-        </DpadBtn>
-
-        {/* Right */}
-        <DpadBtn
-          dir="right"
-          pressed={pressed.has('right')}
-          onDown={press}
-          onUp={release}
-          style={{ top: '50%', right: 0, transform: 'translateY(-50%)' }}
-        >
-          ▶
-        </DpadBtn>
-
-        {/* Center dot */}
         <div style={{
           position: 'absolute',
           top: '50%',
@@ -330,7 +242,6 @@ export default function Game() {
   );
 }
 
-// ── D-Pad Button Component ──
 function DpadBtn({
   dir,
   pressed,
@@ -352,9 +263,7 @@ function DpadBtn({
     height: 64,
     borderRadius: 18,
     border: pressed ? '2px solid #4fc3f7' : '2px solid rgba(255,255,255,0.2)',
-    background: pressed
-      ? 'rgba(79, 195, 247, 0.35)'
-      : 'rgba(255,255,255,0.08)',
+    background: pressed ? 'rgba(79, 195, 247, 0.35)' : 'rgba(255,255,255,0.08)',
     backdropFilter: 'blur(8px)',
     color: pressed ? '#4fc3f7' : 'rgba(255,255,255,0.7)',
     fontSize: 26,
@@ -363,47 +272,23 @@ function DpadBtn({
     alignItems: 'center',
     justifyContent: 'center',
     userSelect: 'none',
-    WebkitUserSelect: 'none',
-    WebkitTapHighlightColor: 'transparent',
     touchAction: 'none',
-    transition: 'transform 0.08s, background 0.08s, border-color 0.08s, color 0.08s',
-    transform: style.transform
-      ? `${style.transform} scale(${pressed ? 0.9 : 1})`
-      : `scale(${pressed ? 0.9 : 1})`,
-    boxShadow: pressed
-      ? '0 0 20px rgba(79, 195, 247, 0.4), inset 0 0 10px rgba(79, 195, 247, 0.2)'
-      : '0 2px 8px rgba(0,0,0,0.3)',
+    transition: 'transform 0.08s, background 0.08s',
+    transform: style.transform ? `${style.transform} scale(${pressed ? 0.9 : 1})` : `scale(${pressed ? 0.9 : 1})`,
     ...style,
   };
 
   return (
     <div
       style={baseStyle}
-      onTouchStart={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
+      // THE FIX: Using Pointer Capture to prevent sticking
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
         onDown(dir);
       }}
-      onTouchEnd={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onUp(dir);
-      }}
-      onTouchCancel={(e) => {
-        e.preventDefault();
-        onUp(dir);
-      }}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onDown(dir);
-      }}
-      onMouseUp={(e) => {
-        e.preventDefault();
-        onUp(dir);
-      }}
-      onMouseLeave={() => {
-        onUp(dir);
-      }}
+      onPointerUp={() => onUp(dir)}
+      onPointerCancel={() => onUp(dir)}
+      onPointerLeave={() => onUp(dir)}
       onContextMenu={(e) => e.preventDefault()}
     >
       {children}
