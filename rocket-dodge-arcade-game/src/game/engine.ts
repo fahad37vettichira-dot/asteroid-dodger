@@ -1,4 +1,4 @@
-import { playExplosion, playCombo, playStart, playBoom } from './audio';
+import { playExplosion, playCombo, playStart, playBoom, playSoftHum } from './audio';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface Vec2 { x: number; y: number }
@@ -97,10 +97,21 @@ const SCORE_PER_SECOND = 10;
 const HS_KEY = 'asteroid-dodger-hs';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function rand(min: number, max: number) { return Math.random() * (max - min) + min; }
-function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
-function dist(a: Vec2, b: Vec2) { return Math.hypot(a.x - b.x, a.y - b.y); }
-function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+function rand(min: number, max: number) {
+  return Math.random() * (max - min) + min;
+}
+
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function dist(a: Vec2, b: Vec2) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
 
 function makeAsteroidVertices(count: number): number[] {
   const verts: number[] = [];
@@ -110,21 +121,50 @@ function makeAsteroidVertices(count: number): number[] {
   return verts;
 }
 
-// ─── Init ────────────────────────────────────────────────────────────────────
+// ─── High Score ──────────────────────────────────────────────────────────────
+// Only keep/show the single best score.
 export function loadHighScores(): HighScore[] {
   try {
     const raw = localStorage.getItem(HS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* noop */ }
-  return [];
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw) as HighScore[];
+
+    if (!Array.isArray(parsed)) return [];
+
+    const validScores = parsed
+      .filter((item) => typeof item.score === 'number')
+      .sort((a, b) => b.score - a.score);
+
+    if (validScores.length === 0) return [];
+
+    const best = validScores[0];
+
+    return [{
+      score: best.score,
+      date: best.date || '',
+    }];
+  } catch {
+    return [];
+  }
 }
 
 function saveHighScores(scores: HighScore[]) {
   try {
-    localStorage.setItem(HS_KEY, JSON.stringify(scores));
-  } catch { /* noop */ }
+    if (scores.length === 0) {
+      localStorage.setItem(HS_KEY, JSON.stringify([]));
+      return;
+    }
+
+    const best = [...scores].sort((a, b) => b.score - a.score)[0];
+
+    localStorage.setItem(HS_KEY, JSON.stringify([best]));
+  } catch {
+    // noop
+  }
 }
 
+// ─── Init ────────────────────────────────────────────────────────────────────
 export function initStars(w: number, h: number): Star[] {
   const stars: Star[] = [];
   for (let i = 0; i < STAR_COUNT; i++) {
@@ -143,10 +183,13 @@ export function createGame(w: number, h: number): GameData {
   return {
     state: 'menu',
     rocket: {
-      x: w / 2, y: h * 0.7,
-      vx: 0, vy: 0,
+      x: w / 2,
+      y: h * 0.7,
+      vx: 0,
+      vy: 0,
       rotation: 0,
-      width: 24, height: 40,
+      width: 24,
+      height: 40,
       invincible: INVINCIBLE_TIME,
       tilt: 0,
     },
@@ -171,10 +214,13 @@ export function createGame(w: number, h: number): GameData {
 export function resetGame(g: GameData) {
   g.state = 'playing';
   g.rocket = {
-    x: g.width / 2, y: g.height * 0.7,
-    vx: 0, vy: 0,
+    x: g.width / 2,
+    y: g.height * 0.7,
+    vx: 0,
+    vy: 0,
     rotation: 0,
-    width: 24, height: 40,
+    width: 24,
+    height: 40,
     invincible: INVINCIBLE_TIME,
     tilt: 0,
   };
@@ -195,36 +241,56 @@ export function resetGame(g: GameData) {
 function spawnAsteroid(g: GameData) {
   const side = Math.floor(rand(0, 4));
   let x = 0, y = 0, vx = 0, vy = 0;
+
   const speed = rand(80, 200) + g.difficulty * 15;
   const radius = rand(ASTEROID_MIN_RADIUS, ASTEROID_MAX_RADIUS);
 
   switch (side) {
-    case 0: // top
-      x = rand(0, g.width); y = -radius;
-      vx = rand(-80, 80); vy = speed;
+    case 0:
+      x = rand(0, g.width);
+      y = -radius;
+      vx = rand(-80, 80);
+      vy = speed;
       break;
-    case 1: // right
-      x = g.width + radius; y = rand(0, g.height);
-      vx = -speed; vy = rand(-80, 80);
+
+    case 1:
+      x = g.width + radius;
+      y = rand(0, g.height);
+      vx = -speed;
+      vy = rand(-80, 80);
       break;
-    case 2: // bottom
-      x = rand(0, g.width); y = g.height + radius;
-      vx = rand(-80, 80); vy = -speed;
+
+    case 2:
+      x = rand(0, g.width);
+      y = g.height + radius;
+      vx = rand(-80, 80);
+      vy = -speed;
       break;
-    case 3: // left
-      x = -radius; y = rand(0, g.height);
-      vx = speed; vy = rand(-80, 80);
+
+    case 3:
+      x = -radius;
+      y = rand(0, g.height);
+      vx = speed;
+      vy = rand(-80, 80);
       break;
   }
 
-  // Bias toward player
-  const toPlayer = { x: g.rocket.x - x, y: g.rocket.y - y };
+  const toPlayer = {
+    x: g.rocket.x - x,
+    y: g.rocket.y - y,
+  };
+
   const mag = Math.hypot(toPlayer.x, toPlayer.y) || 1;
+
   vx += (toPlayer.x / mag) * speed * 0.3;
   vy += (toPlayer.y / mag) * speed * 0.3;
 
   g.asteroids.push({
-    x, y, vx, vy, radius,
+    x,
+    y,
+    vx,
+    vy,
+    radius,
     rotation: rand(0, Math.PI * 2),
     rotSpeed: rand(-2, 2),
     vertices: makeAsteroidVertices(Math.floor(rand(7, 12))),
@@ -253,10 +319,18 @@ function emitThrust(g: GameData, r: Rocket) {
   }
 }
 
-function emitExplosion(g: GameData, x: number, y: number, count: number, color1: string, color2: string) {
+function emitExplosion(
+  g: GameData,
+  x: number,
+  y: number,
+  count: number,
+  color1: string,
+  color2: string,
+) {
   for (let i = 0; i < count; i++) {
     const angle = rand(0, Math.PI * 2);
     const speed = rand(50, 350);
+
     g.particles.push({
       x: x + rand(-5, 5),
       y: y + rand(-5, 5),
@@ -273,6 +347,7 @@ function emitExplosion(g: GameData, x: number, y: number, count: number, color1:
 
 function emitTrail(g: GameData, r: Rocket) {
   if (Math.random() > 0.3) return;
+
   g.particles.push({
     x: r.x + rand(-3, 3),
     y: r.y + rand(-3, 3),
@@ -292,10 +367,12 @@ export function update(g: GameData, dt: number, input: InputState) {
     g.time += dt;
     updateStars(g, dt);
     updateMenuAsteroids(g, dt);
+
     if (input.start) {
       playStart();
       resetGame(g);
     }
+
     return;
   }
 
@@ -304,10 +381,12 @@ export function update(g: GameData, dt: number, input: InputState) {
     g.gameOverTime += dt;
     updateParticles(g, dt);
     updateStars(g, dt);
+
     if (input.restart || input.start) {
       playStart();
       resetGame(g);
     }
+
     return;
   }
 
@@ -315,10 +394,12 @@ export function update(g: GameData, dt: number, input: InputState) {
     g.state = 'paused';
     return;
   }
+
   if (input.pause && g.state === 'paused') {
     g.state = 'playing';
     return;
   }
+
   if (g.state === 'paused') {
     if (input.start) g.state = 'playing';
     return;
@@ -329,7 +410,8 @@ export function update(g: GameData, dt: number, input: InputState) {
 
   // ── Rocket input ──
   const r = g.rocket;
-  let ax = 0, ay = 0;
+  let ax = 0;
+  let ay = 0;
 
   if (input.left) ax -= ROCKET_ACCEL;
   if (input.right) ax += ROCKET_ACCEL;
@@ -340,10 +422,12 @@ export function update(g: GameData, dt: number, input: InputState) {
 
   r.vx += ax * dt;
   r.vy += ay * dt;
+
   r.vx *= ROCKET_FRICTION;
   r.vy *= ROCKET_FRICTION;
 
   const speed = Math.hypot(r.vx, r.vy);
+
   if (speed > ROCKET_MAX_SPEED) {
     r.vx = (r.vx / speed) * ROCKET_MAX_SPEED;
     r.vy = (r.vy / speed) * ROCKET_MAX_SPEED;
@@ -358,17 +442,23 @@ export function update(g: GameData, dt: number, input: InputState) {
   r.y = clamp(r.y, margin, g.height - margin);
 
   // Tilt
-  const targetTilt = clamp(r.vx / ROCKET_MAX_SPEED * 0.6, -0.6, 0.6);
+  const targetTilt = clamp((r.vx / ROCKET_MAX_SPEED) * 0.6, -0.6, 0.6);
   r.tilt = lerp(r.tilt, targetTilt, 1 - Math.pow(0.001, dt));
 
   // Invincibility
   if (r.invincible > 0) r.invincible -= dt;
 
-  // Thrust particles + boom sound
+  // Thrust particles + direction-specific sound
   if (moving) {
     emitThrust(g, r);
-    playBoom();
+
+    if (input.down && !input.up) {
+      playSoftHum(); // deceleration sound
+    } else {
+      playBoom(); // simple acceleration/direction sound
+    }
   }
+
   emitTrail(g, r);
 
   // ── Score ──
@@ -381,40 +471,59 @@ export function update(g: GameData, dt: number, input: InputState) {
   }
 
   // ── Spawn asteroids ──
-  const interval = Math.max(MIN_SPAWN_INTERVAL, BASE_SPAWN_INTERVAL - g.difficulty * 0.04);
+  const interval = Math.max(
+    MIN_SPAWN_INTERVAL,
+    BASE_SPAWN_INTERVAL - g.difficulty * 0.04,
+  );
+
   g.spawnTimer -= dt;
+
   if (g.spawnTimer <= 0) {
     g.spawnTimer = interval;
+
     const count = 1 + Math.floor(g.difficulty / 8);
-    for (let i = 0; i < count; i++) spawnAsteroid(g);
+
+    for (let i = 0; i < count; i++) {
+      spawnAsteroid(g);
+    }
   }
 
   // ── Update asteroids ──
   for (let i = g.asteroids.length - 1; i >= 0; i--) {
     const a = g.asteroids[i];
+
     a.x += a.vx * dt;
     a.y += a.vy * dt;
     a.rotation += a.rotSpeed * dt;
 
     // Remove off-screen
     const margin2 = a.radius + 100;
-    if (a.x < -margin2 || a.x > g.width + margin2 ||
-        a.y < -margin2 || a.y > g.height + margin2) {
-      // Dodged! Increment combo
+
+    if (
+      a.x < -margin2 ||
+      a.x > g.width + margin2 ||
+      a.y < -margin2 ||
+      a.y > g.height + margin2
+    ) {
       if (!a.hit) {
         g.combo++;
         g.comboTimer = 3;
+
         if (g.combo > 1 && g.combo % 5 === 0) {
           const bonus = g.combo * 10;
           g.score += bonus;
           playCombo();
+
           g.scorePopups.push({
-            x: g.width / 2, y: g.height * 0.3,
+            x: g.width / 2,
+            y: g.height * 0.3,
             text: `COMBO x${g.combo}! +${bonus}`,
-            life: 1.5, maxLife: 1.5,
+            life: 1.5,
+            maxLife: 1.5,
           });
         }
       }
+
       g.asteroids.splice(i, 1);
       continue;
     }
@@ -423,24 +532,38 @@ export function update(g: GameData, dt: number, input: InputState) {
     if (r.invincible <= 0 && !a.hit) {
       const d = dist(r, a);
       const hitRadius = a.radius * 0.7 + Math.min(r.width, r.height) * 0.3;
+
       if (d < hitRadius) {
-        // Game over!
         a.hit = true;
         g.screenShake.intensity = 20;
+
         playExplosion();
+
         emitExplosion(g, r.x, r.y, 60, '#ff6b35', '#ffd23f');
         emitExplosion(g, r.x, r.y, 30, '#4fc3f7', '#81d4fa');
 
         const finalScore = Math.floor(g.score);
-        const hs = loadHighScores();
-        hs.push({ score: finalScore, date: new Date().toLocaleDateString() });
-        hs.sort((a2, b) => b.score - a2.score);
-        const top = hs.slice(0, 10);
+        const existingBest = loadHighScores()[0];
+
+        let bestScoreRecord: HighScore;
+
+        if (!existingBest || finalScore > existingBest.score) {
+          bestScoreRecord = {
+            score: finalScore,
+            date: new Date().toLocaleDateString(),
+          };
+        } else {
+          bestScoreRecord = existingBest;
+        }
+
+        const top = [bestScoreRecord];
+
         saveHighScores(top);
         g.highScores = top;
 
         g.state = 'gameover';
         g.gameOverTime = 0;
+
         return;
       }
     }
@@ -449,17 +572,22 @@ export function update(g: GameData, dt: number, input: InputState) {
   // ── Near-miss detection ──
   for (const a of g.asteroids) {
     if (a.hit) continue;
+
     const d = dist(r, a);
     const nearDist = a.radius + 30;
+
     if (d < nearDist && d > a.radius * 0.7 + 10) {
-      // Near miss bonus
       if (Math.random() < 0.02) {
         const bonus = Math.floor(5 + g.difficulty);
+
         g.score += bonus;
+
         g.scorePopups.push({
-          x: r.x + rand(-20, 20), y: r.y - 30,
+          x: r.x + rand(-20, 20),
+          y: r.y - 30,
           text: `+${bonus}`,
-          life: 0.8, maxLife: 0.8,
+          life: 0.8,
+          maxLife: 0.8,
         });
       }
     }
@@ -476,34 +604,46 @@ export function update(g: GameData, dt: number, input: InputState) {
     g.screenShake.x = rand(-1, 1) * g.screenShake.intensity;
     g.screenShake.y = rand(-1, 1) * g.screenShake.intensity;
     g.screenShake.intensity *= Math.pow(0.01, dt);
-    if (g.screenShake.intensity < 0.5) g.screenShake.intensity = 0;
+
+    if (g.screenShake.intensity < 0.5) {
+      g.screenShake.intensity = 0;
+    }
   }
 
   // ── Score popups ──
   for (let i = g.scorePopups.length - 1; i >= 0; i--) {
     g.scorePopups[i].life -= dt;
     g.scorePopups[i].y -= 40 * dt;
-    if (g.scorePopups[i].life <= 0) g.scorePopups.splice(i, 1);
+
+    if (g.scorePopups[i].life <= 0) {
+      g.scorePopups.splice(i, 1);
+    }
   }
 }
 
 function updateParticles(g: GameData, dt: number) {
   for (let i = g.particles.length - 1; i >= 0; i--) {
     const p = g.particles[i];
+
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.life -= dt;
+
     if (p.type === 'explosion') {
       p.vx *= 0.96;
       p.vy *= 0.96;
     }
-    if (p.life <= 0) g.particles.splice(i, 1);
+
+    if (p.life <= 0) {
+      g.particles.splice(i, 1);
+    }
   }
 }
 
 function updateStars(g: GameData, dt: number) {
   for (const s of g.stars) {
     s.y += s.speed * dt;
+
     if (s.y > g.height + 5) {
       s.y = -5;
       s.x = rand(0, g.width);
@@ -512,17 +652,25 @@ function updateStars(g: GameData, dt: number) {
 }
 
 function updateMenuAsteroids(g: GameData, dt: number) {
-  // Spawn occasional asteroids for background effect
   if (Math.random() < dt * 0.8) {
     spawnAsteroid(g);
   }
+
   for (let i = g.asteroids.length - 1; i >= 0; i--) {
     const a = g.asteroids[i];
+
     a.x += a.vx * dt;
     a.y += a.vy * dt;
     a.rotation += a.rotSpeed * dt;
+
     const m = a.radius + 100;
-    if (a.x < -m || a.x > g.width + m || a.y < -m || a.y > g.height + m) {
+
+    if (
+      a.x < -m ||
+      a.x > g.width + m ||
+      a.y < -m ||
+      a.y > g.height + m
+    ) {
       g.asteroids.splice(i, 1);
     }
   }
@@ -544,6 +692,7 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
   gradient.addColorStop(0, '#0a0a1a');
   gradient.addColorStop(0.5, '#0d1033');
   gradient.addColorStop(1, '#1a0a2e');
+
   ctx.fillStyle = gradient;
   ctx.fillRect(-10, -10, W + 20, H + 20);
 
@@ -551,15 +700,18 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
   for (const s of g.stars) {
     ctx.globalAlpha = s.brightness * (0.5 + 0.5 * Math.sin(g.time * 2 + s.x));
     ctx.fillStyle = '#ffffff';
+
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
     ctx.fill();
   }
+
   ctx.globalAlpha = 1;
 
   // Particles
   for (const p of g.particles) {
     const alpha = clamp(p.life / p.maxLife, 0, 1);
+
     ctx.globalAlpha = alpha;
     ctx.fillStyle = p.color;
 
@@ -569,6 +721,7 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
       ctx.fill();
     } else if (p.type === 'thrust') {
       const s = p.size * alpha;
+
       ctx.beginPath();
       ctx.arc(p.x, p.y, s, 0, Math.PI * 2);
       ctx.fill();
@@ -578,6 +731,7 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
       ctx.fill();
     }
   }
+
   ctx.globalAlpha = 1;
 
   // Asteroids
@@ -587,30 +741,52 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
     ctx.rotate(a.rotation);
 
     // Glow
-    const glowGrad = ctx.createRadialGradient(0, 0, a.radius * 0.3, 0, 0, a.radius * 1.5);
+    const glowGrad = ctx.createRadialGradient(
+      0,
+      0,
+      a.radius * 0.3,
+      0,
+      0,
+      a.radius * 1.5,
+    );
+
     glowGrad.addColorStop(0, 'rgba(255,107,53,0.1)');
     glowGrad.addColorStop(1, 'rgba(255,107,53,0)');
+
     ctx.fillStyle = glowGrad;
+
     ctx.beginPath();
     ctx.arc(0, 0, a.radius * 1.5, 0, Math.PI * 2);
     ctx.fill();
 
     // Body
     ctx.beginPath();
+
     for (let i = 0; i < a.vertices.length; i++) {
       const angle = (i / a.vertices.length) * Math.PI * 2;
       const r2 = a.radius * a.vertices[i];
       const px = Math.cos(angle) * r2;
       const py = Math.sin(angle) * r2;
+
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
+
     ctx.closePath();
 
-    const asteroidGrad = ctx.createRadialGradient(-a.radius * 0.3, -a.radius * 0.3, 0, 0, 0, a.radius);
+    const asteroidGrad = ctx.createRadialGradient(
+      -a.radius * 0.3,
+      -a.radius * 0.3,
+      0,
+      0,
+      0,
+      a.radius,
+    );
+
     asteroidGrad.addColorStop(0, '#8b7355');
     asteroidGrad.addColorStop(0.5, '#6b5344');
     asteroidGrad.addColorStop(1, '#3d2b1f');
+
     ctx.fillStyle = asteroidGrad;
     ctx.fill();
 
@@ -620,9 +796,11 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
 
     // Craters
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
+
     ctx.beginPath();
     ctx.arc(a.radius * 0.2, -a.radius * 0.1, a.radius * 0.2, 0, Math.PI * 2);
     ctx.fill();
+
     ctx.beginPath();
     ctx.arc(-a.radius * 0.3, a.radius * 0.25, a.radius * 0.15, 0, Math.PI * 2);
     ctx.fill();
@@ -642,19 +820,30 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
 
       // Engine glow
       const speed2 = Math.hypot(r.vx, r.vy);
+
       if (speed2 > 30) {
         const glowSize = 10 + (speed2 / ROCKET_MAX_SPEED) * 20;
-        const glow = ctx.createRadialGradient(0, r.height * 0.35, 0, 0, r.height * 0.35, glowSize);
+
+        const glow = ctx.createRadialGradient(
+          0,
+          r.height * 0.35,
+          0,
+          0,
+          r.height * 0.35,
+          glowSize,
+        );
+
         glow.addColorStop(0, 'rgba(255,210,63,0.8)');
         glow.addColorStop(0.5, 'rgba(255,107,53,0.3)');
         glow.addColorStop(1, 'rgba(255,107,53,0)');
+
         ctx.fillStyle = glow;
+
         ctx.beginPath();
         ctx.arc(0, r.height * 0.35, glowSize, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Body
       drawRocket(ctx, r.width, r.height);
 
       ctx.restore();
@@ -664,29 +853,41 @@ export function render(ctx: CanvasRenderingContext2D, g: GameData) {
   // Score popups
   for (const sp of g.scorePopups) {
     const alpha = clamp(sp.life / sp.maxLife, 0, 1);
+
     ctx.globalAlpha = alpha;
     ctx.fillStyle = '#ffd23f';
     ctx.font = `bold ${14 + (1 - alpha) * 4}px "Segoe UI", system-ui, sans-serif`;
     ctx.textAlign = 'center';
+
     ctx.fillText(sp.text, sp.x, sp.y);
   }
+
   ctx.globalAlpha = 1;
 
   ctx.restore();
 
-  // ── Vignette ──
-  const vignette = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+  // Vignette
+  const vignette = ctx.createRadialGradient(
+    W / 2,
+    H / 2,
+    Math.min(W, H) * 0.3,
+    W / 2,
+    H / 2,
+    Math.max(W, H) * 0.75,
+  );
+
   vignette.addColorStop(0, 'rgba(0,0,0,0)');
   vignette.addColorStop(1, 'rgba(0,0,0,0.5)');
+
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 
-  // ── HUD ──
+  // HUD
   if (g.state === 'playing') {
     drawHUD(ctx, g);
   }
 
-  // ── Overlays ──
+  // Overlays
   if (g.state === 'menu') {
     drawMenuOverlay(ctx, g);
   } else if (g.state === 'paused') {
@@ -706,11 +907,13 @@ function drawRocket(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.closePath();
 
   const bodyGrad = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+
   bodyGrad.addColorStop(0, '#c0c8d8');
   bodyGrad.addColorStop(0.3, '#e8ecf2');
   bodyGrad.addColorStop(0.5, '#ffffff');
   bodyGrad.addColorStop(0.7, '#e8ecf2');
   bodyGrad.addColorStop(1, '#a0a8b8');
+
   ctx.fillStyle = bodyGrad;
   ctx.fill();
 
@@ -725,6 +928,7 @@ function drawRocket(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.lineTo(-w * 0.35, -h * 0.05);
   ctx.bezierCurveTo(-w * 0.4, -h * 0.15, -w * 0.3, -h * 0.35, 0, -h / 2);
   ctx.closePath();
+
   ctx.fillStyle = '#ff4444';
   ctx.fill();
 
@@ -733,6 +937,7 @@ function drawRocket(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.arc(0, -h * 0.08, w * 0.18, 0, Math.PI * 2);
   ctx.fillStyle = '#4fc3f7';
   ctx.fill();
+
   ctx.strokeStyle = '#b0b8c8';
   ctx.lineWidth = 1.5;
   ctx.stroke();
@@ -745,6 +950,7 @@ function drawRocket(ctx: CanvasRenderingContext2D, w: number, h: number) {
 
   // Fins
   ctx.fillStyle = '#ff4444';
+
   // Left fin
   ctx.beginPath();
   ctx.moveTo(-w * 0.35, h * 0.25);
@@ -752,6 +958,7 @@ function drawRocket(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.lineTo(-w * 0.3, h * 0.5);
   ctx.closePath();
   ctx.fill();
+
   // Right fin
   ctx.beginPath();
   ctx.moveTo(w * 0.35, h * 0.25);
@@ -764,8 +971,8 @@ function drawRocket(ctx: CanvasRenderingContext2D, w: number, h: number) {
 function drawHUD(ctx: CanvasRenderingContext2D, g: GameData) {
   const score = Math.floor(g.score);
 
-  // Score
   ctx.save();
+
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   roundRect(ctx, 10, 10, 160, 40, 12);
   ctx.fill();
@@ -776,7 +983,6 @@ function drawHUD(ctx: CanvasRenderingContext2D, g: GameData) {
   ctx.textBaseline = 'middle';
   ctx.fillText(`⭐ ${score.toLocaleString()}`, 22, 31);
 
-  // Combo
   if (g.combo > 1) {
     ctx.fillStyle = '#ffd23f';
     ctx.font = 'bold 14px "Segoe UI", system-ui, sans-serif';
@@ -784,7 +990,6 @@ function drawHUD(ctx: CanvasRenderingContext2D, g: GameData) {
     ctx.fillText(`COMBO x${g.combo}`, 22, 60);
   }
 
-  // Pause hint
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.font = '12px "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'right';
@@ -793,7 +998,14 @@ function drawHUD(ctx: CanvasRenderingContext2D, g: GameData) {
   ctx.restore();
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -808,18 +1020,18 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 function drawMenuOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
-  const W = g.width, H = g.height;
+  const W = g.width;
+  const H = g.height;
 
   // Dim
   ctx.fillStyle = 'rgba(5, 5, 20, 0.6)';
   ctx.fillRect(0, 0, W, H);
 
-  // Title
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Glow effect
+  // Title
   ctx.shadowColor = '#4fc3f7';
   ctx.shadowBlur = 30;
   ctx.fillStyle = '#ffffff';
@@ -844,14 +1056,17 @@ function drawMenuOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
   const btnY = H * 0.55;
 
   const pulse = 1 + Math.sin(g.time * 3) * 0.02;
+
   ctx.save();
   ctx.translate(W / 2, btnY + btnH / 2);
   ctx.scale(pulse, pulse);
   ctx.translate(-W / 2, -(btnY + btnH / 2));
 
   const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+
   btnGrad.addColorStop(0, '#4fc3f7');
   btnGrad.addColorStop(1, '#0288d1');
+
   ctx.fillStyle = btnGrad;
   roundRect(ctx, btnX, btnY, btnW, btnH, 28);
   ctx.fill();
@@ -868,28 +1083,24 @@ function drawMenuOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
 
   ctx.restore();
 
-  // High scores
+  // Show only one max score / personal best
   if (g.highScores.length > 0) {
-    const startY = H * 0.68;
-    ctx.fillStyle = '#ffd23f';
-    ctx.font = `bold ${Math.min(16, W * 0.035)}px "Segoe UI", system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText('🏆 HIGH SCORES', W / 2, startY);
+    const bestScore = g.highScores[0].score;
+    const startY = H * 0.70;
 
-    ctx.fillStyle = '#b0b8d0';
-    ctx.font = `${Math.min(14, W * 0.03)}px "Segoe UI", system-ui, sans-serif`;
-    const count = Math.min(5, g.highScores.length);
-    for (let i = 0; i < count; i++) {
-      const hs = g.highScores[i];
-      ctx.fillText(`${i + 1}. ${hs.score.toLocaleString()}  —  ${hs.date}`, W / 2, startY + 24 + i * 22);
-    }
+    ctx.fillStyle = '#ffd23f';
+    ctx.font = `bold ${Math.min(18, W * 0.04)}px "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+
+    ctx.fillText(`🏆 BEST SCORE: ${bestScore.toLocaleString()}`, W / 2, startY);
   }
 
   ctx.restore();
 }
 
 function drawPauseOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
-  const W = g.width, H = g.height;
+  const W = g.width;
+  const H = g.height;
 
   ctx.fillStyle = 'rgba(5, 5, 20, 0.7)';
   ctx.fillRect(0, 0, W, H);
@@ -911,7 +1122,8 @@ function drawPauseOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
 }
 
 function drawGameOverOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
-  const W = g.width, H = g.height;
+  const W = g.width;
+  const H = g.height;
 
   ctx.fillStyle = 'rgba(15, 5, 5, 0.75)';
   ctx.fillRect(0, 0, W, H);
@@ -933,26 +1145,26 @@ function drawGameOverOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
   ctx.font = `bold ${Math.min(32, W * 0.06)}px "Segoe UI", system-ui, sans-serif`;
   ctx.fillText(`Score: ${Math.floor(g.score).toLocaleString()}`, W / 2, H * 0.35);
 
-  // Best score — animated growing text
+  // Best score
   const bestScore = g.highScores.length > 0 ? g.highScores[0].score : 0;
   const isNewHS = Math.floor(g.score) >= bestScore && bestScore > 0;
-  const t = Math.min(g.gameOverTime / 0.8, 1); // 0→1 over 0.8 seconds
-  const easedT = 1 - Math.pow(1 - t, 3); // ease-out cubic
+  const t = Math.min(g.gameOverTime / 0.8, 1);
+  const easedT = 1 - Math.pow(1 - t, 3);
 
   if (isNewHS) {
-    // Grows from small to big with glow
     const size = Math.min(28, W * 0.055) * easedT;
     const glowPulse = 15 + Math.sin(g.gameOverTime * 5) * 10;
+
     ctx.shadowColor = '#ffd23f';
     ctx.shadowBlur = glowPulse * easedT;
     ctx.fillStyle = '#ffd23f';
     ctx.font = `bold ${size}px "Segoe UI", system-ui, sans-serif`;
-    ctx.fillText('🎉 NEW HIGH SCORE! 🎉', W / 2, H * 0.42);
+    ctx.fillText('🎉 NEW BEST SCORE! 🎉', W / 2, H * 0.42);
     ctx.shadowBlur = 0;
   } else if (bestScore > 0) {
-    // Grows from small to final size
     const size = Math.min(20, W * 0.042) * easedT;
     const glowPulse = 8 + Math.sin(g.gameOverTime * 3) * 5;
+
     ctx.shadowColor = '#4fc3f7';
     ctx.shadowBlur = glowPulse * easedT;
     ctx.fillStyle = '#4fc3f7';
@@ -968,8 +1180,10 @@ function drawGameOverOverlay(ctx: CanvasRenderingContext2D, g: GameData) {
   const btnY = H * 0.50;
 
   const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+
   btnGrad.addColorStop(0, '#ff6b35');
   btnGrad.addColorStop(1, '#d84315');
+
   ctx.fillStyle = btnGrad;
   roundRect(ctx, btnX, btnY, btnW, btnH, 25);
   ctx.fill();
