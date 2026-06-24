@@ -102,7 +102,7 @@ export function playExplosion() {
   }
 }
 
-// ─── BOOM — Deep bass boom when accelerating ────────────────────────────────
+// ─── Rocket Acceleration Sound (Style A: Sci-Fi Laser) ──────────────────────
 let lastBoomTime = 0;
 
 export function playBoom() {
@@ -120,6 +120,11 @@ export function playBoom() {
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start(now); osc.stop(now + 0.1);
 }
+
+// ─── Combo Chime ────────────────────────────────────────────────────────────
+export function playCombo() {
+  const ctx = getCtx();
+  if (!ctx) return;
 
   const notes = [523, 659, 784];
   notes.forEach((freq, i) => {
