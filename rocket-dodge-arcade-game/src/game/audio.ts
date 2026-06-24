@@ -102,20 +102,52 @@ export function playExplosion() {
   }
 }
 
-// ─── Rocket Acceleration Sound (Retro Bouncy Style) ─────────────────────────
+// ─── ACCELERATE: 🔥 Fiery Blast (Louder, aggressive) ────────────────────────
 let lastBoomTime = 0;
 
 export function playBoom() {
   const ctx = getCtx();
+  if (!ctx || ctx.currentTime - lastBoomTime < 0.15) return;
+  lastBoomTime = ctx.currentTime;
+  const now = ctx.currentTime;
+
+  // Aggressive Rumble
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(150, now);
+  osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+  gain.gain.setValueAtTime(0.5, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(now); osc.stop(now + 0.2);
+
+  // Fire Hiss
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource();
+  noise.buffer = buf;
+  const nGain = ctx.createGain();
+  nGain.gain.setValueAtTime(0.2, now);
+  nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+  noise.connect(nGain); nGain.connect(ctx.destination);
+  noise.start(now);
+}
+
+// ─── COMING DOWN: 🛸 Soft Hum (Quiet and subtle) ───────────────────────────
+export function playSoftHum() {
+  const ctx = getCtx();
   if (!ctx || ctx.currentTime - lastBoomTime < 0.1) return;
   lastBoomTime = ctx.currentTime;
   const now = ctx.currentTime;
+
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(200, now);
-  osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
-  gain.gain.setValueAtTime(0.05, now);
+  osc.type = 'sine'; // Pure smooth tone
+  osc.frequency.setValueAtTime(120, now);
+  osc.frequency.exponentialRampToValueAtTime(80, now + 0.1);
+  gain.gain.setValueAtTime(0.15, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start(now); osc.stop(now + 0.1);
