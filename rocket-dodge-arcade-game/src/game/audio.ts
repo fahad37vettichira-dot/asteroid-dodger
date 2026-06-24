@@ -1,6 +1,7 @@
 // Procedural sound effects using Web Audio API — zero network, zero files
 
 let audioCtx: AudioContext | null = null;
+let lastBoomTime = 0;
 
 function getCtx(): AudioContext | null {
   if (!audioCtx) {
@@ -85,57 +86,40 @@ export function playExplosion() {
   screechGain.connect(ctx.destination);
   screechOsc.start(now);
   screechOsc.stop(now + 0.3);
-
-  // Layer 4: Debris scatter
-  for (let i = 0; i < 5; i++) {
-    const clickTime = now + 0.05 + i * 0.06 + Math.random() * 0.03;
-    const clickOsc = ctx.createOscillator();
-    clickOsc.type = 'square';
-    clickOsc.frequency.setValueAtTime(200 + Math.random() * 800, clickTime);
-    const clickGain = ctx.createGain();
-    clickGain.gain.setValueAtTime(0.08, clickTime);
-    clickGain.gain.exponentialRampToValueAtTime(0.001, clickTime + 0.04);
-    clickOsc.connect(clickGain);
-    clickGain.connect(ctx.destination);
-    clickOsc.start(clickTime);
-    clickOsc.stop(clickTime + 0.04);
-  }
 }
 
-// ─── ACCELERATE: 🔥 Fiery Blast (Louder, aggressive) ────────────────────────
-let lastBoomTime = 0;
-
+// ─── UP: 🔥 Fiery Blast (Aggressive) ──────────────────────────────────────
 export function playBoom() {
   const ctx = getCtx();
-  if (!ctx || ctx.currentTime - lastBoomTime < 0.15) return;
+  if (!ctx || ctx.currentTime - lastBoomTime < 0.1) return;
   lastBoomTime = ctx.currentTime;
   const now = ctx.currentTime;
 
-  // Aggressive Rumble
+  // Oscillator Layer
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(150, now);
+  osc.frequency.setValueAtTime(160, now);
   osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
-  gain.gain.setValueAtTime(0.5, now);
+  gain.gain.setValueAtTime(0.4, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start(now); osc.stop(now + 0.2);
 
-  // Fire Hiss
-  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
+  // Noise Layer (Hiss)
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   const noise = ctx.createBufferSource();
   noise.buffer = buf;
   const nGain = ctx.createGain();
-  nGain.gain.setValueAtTime(0.2, now);
-  nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+  nGain.gain.setValueAtTime(0.15, now);
+  nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
   noise.connect(nGain); nGain.connect(ctx.destination);
   noise.start(now);
 }
 
-// ─── COMING DOWN: 🛸 Soft Hum (Quiet and subtle) ───────────────────────────
+// ─── DOWN: 🛸 Soft Hum (Subtle) ───────────────────────────────────────────
 export function playSoftHum() {
   const ctx = getCtx();
   if (!ctx || ctx.currentTime - lastBoomTime < 0.1) return;
@@ -144,10 +128,10 @@ export function playSoftHum() {
 
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'sine'; // Pure smooth tone
+  osc.type = 'sine';
   osc.frequency.setValueAtTime(120, now);
   osc.frequency.exponentialRampToValueAtTime(80, now + 0.1);
-  gain.gain.setValueAtTime(0.15, now);
+  gain.gain.setValueAtTime(0.2, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start(now); osc.stop(now + 0.1);
