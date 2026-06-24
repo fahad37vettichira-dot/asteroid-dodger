@@ -102,7 +102,7 @@ export function playExplosion() {
   }
 }
 
-// ─── Rocket Acceleration Sound (Style A: Sci-Fi Laser) ──────────────────────
+// ─── Rocket Acceleration Sound (Retro Bouncy Style) ─────────────────────────
 let lastBoomTime = 0;
 
 export function playBoom() {
@@ -112,10 +112,10 @@ export function playBoom() {
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'sawtooth';
-  osc.frequency.setValueAtTime(600, now);
-  osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
-  gain.gain.setValueAtTime(0.1, now);
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(200, now);
+  osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+  gain.gain.setValueAtTime(0.05, now);
   gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start(now); osc.stop(now + 0.1);
