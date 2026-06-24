@@ -107,85 +107,19 @@ let lastBoomTime = 0;
 
 export function playBoom() {
   const ctx = getCtx();
-  if (!ctx) return;
-
-  // Throttle: don't play more than every 180ms
+  if (!ctx || ctx.currentTime - lastBoomTime < 0.1) return;
+  lastBoomTime = ctx.currentTime;
   const now = ctx.currentTime;
-  if (now - lastBoomTime < 0.18) return;
-  lastBoomTime = now;
-
-  // Deep sub-bass punch
-  const bass = ctx.createOscillator();
-  bass.type = 'sine';
-  bass.frequency.setValueAtTime(80, now);
-  bass.frequency.exponentialRampToValueAtTime(30, now + 0.25);
-  const bassGain = ctx.createGain();
-  bassGain.gain.setValueAtTime(0.35, now);
-  bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-  bass.connect(bassGain);
-  bassGain.connect(ctx.destination);
-  bass.start(now);
-  bass.stop(now + 0.25);
-
-  // Mid punch — gives it the "boom" character
-  const mid = ctx.createOscillator();
-  mid.type = 'triangle';
-  mid.frequency.setValueAtTime(200, now);
-  mid.frequency.exponentialRampToValueAtTime(60, now + 0.15);
-  const midGain = ctx.createGain();
-  midGain.gain.setValueAtTime(0.2, now);
-  midGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-  mid.connect(midGain);
-  midGain.connect(ctx.destination);
-  mid.start(now);
-  mid.stop(now + 0.15);
-
-  // Short noise burst — the "whoosh" part of the boom
-  const noiseDur = 0.12;
-  const sr = ctx.sampleRate;
-  const bufSz = Math.floor(noiseDur * sr);
-  const buf = ctx.createBuffer(1, bufSz, sr);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < bufSz; i++) {
-    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * 0.03));
-  }
-  const noiseSrc = ctx.createBufferSource();
-  noiseSrc.buffer = buf;
-  const nf = ctx.createBiquadFilter();
-  nf.type = 'lowpass';
-  nf.frequency.setValueAtTime(500, now);
-  nf.frequency.exponentialRampToValueAtTime(100, now + noiseDur);
-  const ng = ctx.createGain();
-  ng.gain.setValueAtTime(0.15, now);
-  ng.gain.exponentialRampToValueAtTime(0.001, now + noiseDur);
-  noiseSrc.connect(nf);
-  nf.connect(ng);
-  ng.connect(ctx.destination);
-  noiseSrc.start(now);
-
-  // Upper harmonic ring — gives it a rocket-like shimmer
-  const shimmer = ctx.createOscillator();
-  shimmer.type = 'sawtooth';
-  shimmer.frequency.setValueAtTime(400, now);
-  shimmer.frequency.exponentialRampToValueAtTime(150, now + 0.08);
-  const shimmerFilter = ctx.createBiquadFilter();
-  shimmerFilter.type = 'bandpass';
-  shimmerFilter.frequency.setValueAtTime(600, now);
-  shimmerFilter.Q.setValueAtTime(5, now);
-  const shimmerGain = ctx.createGain();
-  shimmerGain.gain.setValueAtTime(0.06, now);
-  shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-  shimmer.connect(shimmerFilter);
-  shimmerFilter.connect(shimmerGain);
-  shimmerGain.connect(ctx.destination);
-  shimmer.start(now);
-  shimmer.stop(now + 0.08);
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(600, now);
+  osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+  gain.gain.setValueAtTime(0.1, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(now); osc.stop(now + 0.1);
 }
-
-// ─── Combo Chime ────────────────────────────────────────────────────────────
-export function playCombo() {
-  const ctx = getCtx();
-  if (!ctx) return;
 
   const notes = [523, 659, 784];
   notes.forEach((freq, i) => {
